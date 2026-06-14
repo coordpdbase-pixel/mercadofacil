@@ -211,7 +211,21 @@ export default function App(){
   async function addPromo(entry){await sbInsert("promocoes",entry);await reload();showToast("✅ Promoção publicada!");}
   async function deletePromo(id){await sbDelete("promocoes",id);await reload();showToast("🗑️ Promoção removida");}
 
-  async function submitPending(entry){await sbInsert("fotos_pendentes",entry);await reload();showToast("📤 Enviado! Aguardando aprovação.");}
+ async function submitPending(entry){
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/fotos_pendentes`,{
+    method:"POST",
+    headers:{...H,"Prefer":"return=representation"},
+    body:JSON.stringify(entry)
+  });
+  const data = await r.json();
+  console.log("resultado:", r.status, data);
+  if(r.ok){
+    await reload();
+    showToast("📤 Enviado! Aguardando aprovação.");
+  } else {
+    showToast("❌ Erro: "+JSON.stringify(data));
+  }
+}
   async function approvePending(item){
     await sbUpdate("fotos_pendentes",item.id,{aprovada:true});
     await sbInsert("promocoes",{id:uid(),nome:item.descricao||"Promoção",descricao:"",foto_url:item.foto_url,mercado:item.mercado,preco:item.preco,aprovada:true,ts:Date.now()});
