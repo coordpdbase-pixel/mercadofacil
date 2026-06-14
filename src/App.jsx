@@ -175,23 +175,26 @@ export default function App(){
   const [pending,setPending]   = useState([]);
   const [toast,setToast]       = useState(null);
   const [showAdd,setShowAdd]   = useState(false);
+  const [reports,setReports]   = useState([]);
   const [loading,setLoading]   = useState(true);
   const [isAdmin,setIsAdmin]   = useState(false);
   const [showLogin,setShowLogin]= useState(false);
 
   async function reload(){
-    const [p,s,m,pr,pe]=await Promise.all([
+    const [p,s,m,pr,pe,re]=await Promise.all([
       sbGet("prices","&order=ts.desc"),
       sbGet("shopping","&order=ts.asc"),
       sbGetMarkets(),
       sbGet("promocoes","&order=ts.desc&aprovada=eq.true"),
       isAdmin?sbGet("fotos_pendentes","&order=ts.desc&aprovada=eq.false"):Promise.resolve([]),
+      isAdmin?sbGet("price_reports","&order=ts.desc&resolved=eq.false"):Promise.resolve([]),
     ]);
     setPrices(Array.isArray(p)?p:[]);
     setList(Array.isArray(s)?s:[]);
     setMarkets(Array.isArray(m)?m:[]);
     setPromos(Array.isArray(pr)?pr:[]);
     setPending(Array.isArray(pe)?pe:[]);
+    setReports(Array.isArray(re)?re:[]);
     setLoading(false);
   }
 
@@ -208,24 +211,21 @@ export default function App(){
   async function addMarket(name){await sbAddMarket(name);await reload();showToast(`✅ ${name} adicionado!`);}
   async function removeMarket(name){await sbDeleteMarket(name);await reload();showToast(`🗑️ ${name} removido`);}
 
+  async function reportPrice(entry){
+    await sbInsert("price_reports",{id:uid(),price_id:entry.id,name:entry.name,market:entry.market,price:entry.price,resolved:false,ts:Date.now()});
+    await reload();
+    showToast("⚠️ Sinalizado! O admin vai verificar.");
+  }
+  async function resolveReport(reportId,priceId,deleteIt){
+    if(deleteIt) await sbDelete("prices",priceId);
+    await sbUpdate("price_reports",reportId,{resolved:true});
+    await reload();
+    showToast(deleteIt?"🗑️ Preço removido":"✅ Mantido");
+  }
   async function addPromo(entry){await sbInsert("promocoes",entry);await reload();showToast("✅ Promoção publicada!");}
   async function deletePromo(id){await sbDelete("promocoes",id);await reload();showToast("🗑️ Promoção removida");}
 
- async function submitPending(entry){
-  const r = await fetch(`${SUPABASE_URL}/rest/v1/fotos_pendentes`,{
-    method:"POST",
-    headers:{...H,"Prefer":"return=representation"},
-    body:JSON.stringify(entry)
-  });
-  const data = await r.json();
-  console.log("resultado:", r.status, data);
-  if(r.ok){
-    await reload();
-    showToast("📤 Enviado! Aguardando aprovação.");
-  } else {
-    showToast("❌ Erro: "+JSON.stringify(data));
-  }
-}
+  async function submitPending(entry){await sbInsert("fotos_pendentes",entry);await reload();showToast("📤 Enviado! Aguardando aprovação.");}
   async function approvePending(item){
     await sbUpdate("fotos_pendentes",item.id,{aprovada:true});
     await sbInsert("promocoes",{id:uid(),nome:item.descricao||"Promoção",descricao:"",foto_url:item.foto_url,mercado:item.mercado,preco:item.preco,aprovada:true,ts:Date.now()});
@@ -245,7 +245,7 @@ export default function App(){
   );
 
   const pendingCount=list.filter(i=>!i.done).length;
-  const pendingApproval=pending.filter(i=>!i.aprovada).length;
+  const pendingApproval=pending.filter(i=>!i.aprovada).length + reports.length;
 
   const tabs=[
     {id:"compare", icon:"📊", label:"Comparar"},
@@ -280,13 +280,13 @@ export default function App(){
         </div>
 
         <div className="content">
-          {tab==="compare"  && <CompareTab  prices={prices} markets={markets} onDelete={deletePrice}/>}
+          {tab==="compare"  && <CompareTab  prices={prices} markets={markets} onDelete={deletePrice} isAdmin={isAdmin} onReport={reportPrice}/>}
           {tab==="register" && <RegisterTab markets={markets} onSave={addPrice}/>}
           {tab==="promos"   && <PromosTab   promos={promos} isAdmin={isAdmin} markets={markets} onAdd={addPromo} onDelete={deletePromo} onSubmit={submitPending}/>}
           {tab==="history"  && <HistoryTab  prices={prices} markets={markets}/>}
           {tab==="list"     && <ListTab     items={list} onToggle={toggleItem} onDelete={deleteItem} prices={prices} markets={markets}/>}
           {tab==="markets"  && <MarketsTab  markets={markets} prices={prices} onAdd={addMarket} onRemove={removeMarket} showToast={showToast}/>}
-          {tab==="admin"    && isAdmin && <AdminTab pending={pending} onApprove={approvePending} onReject={rejectPending}/>}
+          {tab==="admin"    && isAdmin && <AdminTab pending={pending} onApprove={approvePending} onReject={rejectPending} reports={reports} onResolve={resolveReport}/>}
         </div>
 
         {tab==="list"    && <button className="fab" onClick={()=>setShowAdd(true)}>+</button>}
@@ -301,7 +301,7 @@ export default function App(){
 }
 
 // ── Compare ───────────────────────────────────────────────
-function CompareTab({prices,markets,onDelete}){
+function CompareTab({prices,markets,onDelete,isAdmin,onReport}){
   const [search,setSearch]=useState("");
   const groups={};
   prices.forEach(p=>{const key=p.name.toLowerCase().trim();if(!groups[key])groups[key]={name:p.name,entries:[]};groups[key].entries.push(p);});
@@ -310,12 +310,12 @@ function CompareTab({prices,markets,onDelete}){
   return(
     <>
       <input className="input" placeholder="🔍 Buscar produto..." value={search} onChange={e=>setSearch(e.target.value)} style={{marginBottom:16}}/>
-      {filtered.map(g=><ProductCard key={g.name} group={g} markets={markets} onDelete={onDelete}/>)}
+      {filtered.map(g=><ProductCard key={g.name} group={g} markets={markets} onDelete={onDelete} isAdmin={isAdmin} onReport={onReport}/>)}
     </>
   );
 }
 
-function ProductCard({group,markets,onDelete}){
+function ProductCard({group,markets,onDelete,isAdmin,onReport}){
   const [open,setOpen]=useState(false);
   const sorted=[...group.entries].sort((a,b)=>a.price-b.price);
   const best=sorted[0],worst=sorted[sorted.length-1];
@@ -359,27 +359,14 @@ function RegisterTab({markets,onSave}){
   const [price,setPrice]=useState("");
   const [market,setMarket]=useState(markets[0]||"");
   const [qty,setQty]=useState("1");
-  const [preview,setPreview]=useState(null);
-  const [fileObj,setFileObj]=useState(null);
   const [saving,setSaving]=useState(false);
-  const fileRef=useRef();
   useEffect(()=>{if(!market&&markets.length)setMarket(markets[0]);},[markets]);
-
-  async function handlePhoto(e){
-    const file=e.target.files[0];
-    if(!file) return;
-    const resized=await resizeImage(file);
-    setFileObj(resized);
-    setPreview(URL.createObjectURL(resized));
-  }
 
   async function handleSave(){
     if(!name.trim()||!price||!market) return;
     setSaving(true);
-    let photoUrl=null;
-    if(fileObj){photoUrl=await uploadFoto(fileObj);}
-    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qty||"1",photo:photoUrl,ts:Date.now()});
-    setName("");setPrice("");setQty("1");setPreview(null);setFileObj(null);
+    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qty||"1",photo:null,ts:Date.now()});
+    setName("");setPrice("");setQty("1");
     setSaving(false);
   }
 
@@ -389,12 +376,6 @@ function RegisterTab({markets,onSave}){
     <>
       <div className="section-title">Registrar Preço</div>
       <div className="card">
-        <div className="photo-area" onClick={()=>fileRef.current.click()}>
-          {preview?<img src={preview} alt="produto" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:10}}/>
-            :<><div style={{fontSize:36,marginBottom:6}}>📸</div><div style={{fontFamily:"Sora,sans-serif",fontWeight:600,fontSize:14,marginBottom:4}}>Tirar foto do produto</div><div style={{fontSize:12,color:C.muted}}>Opcional — toque para abrir a câmera</div></>}
-        </div>
-        <input type="file" accept="image/*" capture="environment" ref={fileRef} style={{display:"none"}} onChange={handlePhoto}/>
-        {preview&&<button className="btn btn-sm btn-danger" style={{marginBottom:12,width:"100%"}} onClick={()=>{setPreview(null);setFileObj(null);}}>✕ Remover foto</button>}
         <div style={{marginBottom:12}}>
           <div className="label">Nome do produto</div>
           <input className="input" placeholder="Ex: Arroz Camil 5kg" value={name} onChange={e=>setName(e.target.value)}/>
@@ -423,7 +404,7 @@ function PromosTab({promos,isAdmin,markets,onAdd,onDelete,onSubmit}){
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
         <div className="section-title" style={{margin:0}}>🏷️ Promoções</div>
         <button className="btn btn-sm btn-outline" onClick={()=>setShowForm(true)}>
-          {isAdmin?"+ Nova promo":"📤 Enviar foto"}
+          {isAdmin?"+ Nova promo":"🤝 Colaborar com promoção"}
         </button>
       </div>
 
@@ -458,10 +439,7 @@ function PromoSheet({isAdmin,markets,onClose,onSave}){
   const [mercado,setMercado]=useState(markets[0]||"");
   const [preco,setPreco]=useState("");
   const [validade,setValidade]=useState("");
-  const [preview,setPreview]=useState(null);
-  const [fileObj,setFileObj]=useState(null);
   const [saving,setSaving]=useState(false);
-  const fileRef=useRef();
 
   async function handlePhoto(e){
     const file=e.target.files[0];
@@ -484,7 +462,7 @@ function PromoSheet({isAdmin,markets,onClose,onSave}){
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"/>
-        <div className="sheet-title">{isAdmin?"Nova Promoção":"Enviar foto para aprovação"}</div>
+        <div className="sheet-title">{isAdmin?"Nova Promoção":"Colaborar com uma promoção"}</div>
         <div className="photo-area" onClick={()=>fileRef.current.click()}>
           {preview?<img src={preview} alt="" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:10}}/>
             :<><div style={{fontSize:32,marginBottom:6}}>📸</div><div style={{fontSize:13,fontWeight:600}}>Foto da promoção</div><div style={{fontSize:12,color:C.muted}}>Toque para abrir a câmera</div></>}
@@ -498,7 +476,7 @@ function PromoSheet({isAdmin,markets,onClose,onSave}){
           <div style={{flex:1}}><div className="label">Preço (R$)</div><input className="input" placeholder="0,00" inputMode="decimal" value={preco} onChange={e=>setPreco(e.target.value)}/></div>
         </div>
         <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{opacity:saving?.5:1}}>
-          {saving?"Enviando...":(isAdmin?"📢 Publicar":"📤 Enviar para aprovação")}
+          {saving?"Enviando...":(isAdmin?"📢 Publicar":"📢 Enviar para o admin aprovar")}
         </button>
       </div>
     </div>
@@ -506,14 +484,35 @@ function PromoSheet({isAdmin,markets,onClose,onSave}){
 }
 
 // ── Admin Tab ─────────────────────────────────────────────
-function AdminTab({pending,onApprove,onReject}){
+function AdminTab({pending,onApprove,onReject,reports,onResolve}){
   const pendentes=pending.filter(p=>!p.aprovada);
   return(
     <>
       <div className="section-title">👑 Painel Admin — Aprovações</div>
-      {pendentes.length===0
-        ?<div className="empty"><div className="empty-icon">✅</div><div className="empty-title">Nada pendente</div><p>Nenhuma foto aguardando aprovação.</p></div>
-        :pendentes.map(p=>(
+
+      {pendentes.length===0&&reports.length===0&&
+        <div className="empty"><div className="empty-icon">✅</div><div className="empty-title">Nada pendente</div><p>Tudo em ordem!</p></div>
+      }
+
+      {reports.length>0&&<>
+        <div style={{fontFamily:"Sora,sans-serif",fontWeight:700,fontSize:14,marginBottom:8,color:C.red}}>⚠️ Preços sinalizados ({reports.length})</div>
+        {reports.map(r=>(
+          <div key={r.id} style={{border:`1.5px solid ${C.red}`,borderRadius:14,padding:14,marginBottom:10,background:"#FFF5F5"}}>
+            <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{r.name}</div>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>
+              <span className={`market-dot m0`}></span>{r.market} · <span style={{color:C.tangerine,fontWeight:700}}>{fmtBRL(r.price)}</span> · {fmtDate(r.ts)}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-sm btn-danger" style={{flex:1}} onClick={()=>onResolve(r.id,r.price_id,true)}>🗑️ Excluir preço</button>
+              <button className="btn btn-sm btn-yellow" style={{flex:1}} onClick={()=>onResolve(r.id,r.price_id,false)}>✅ Manter</button>
+            </div>
+          </div>
+        ))}
+      </>}
+
+      {pendentes.length>0&&<>
+        <div style={{fontFamily:"Sora,sans-serif",fontWeight:700,fontSize:14,marginBottom:8,color:C.tangerine}}>📸 Fotos aguardando aprovação ({pendentes.length})</div>
+        {pendentes.map(p=>(
           <div className="pending-card" key={p.id}>
             {p.foto_url&&<img src={p.foto_url} alt="" style={{width:"100%",maxHeight:200,objectFit:"cover",borderRadius:10,marginBottom:10}}/>}
             <div style={{fontSize:14,fontWeight:600,marginBottom:4}}>{p.descricao||"Sem descrição"}</div>
@@ -527,8 +526,8 @@ function AdminTab({pending,onApprove,onReject}){
               <button className="btn btn-sm btn-danger" style={{flex:1}} onClick={()=>onReject(p.id)}>🗑️ Rejeitar</button>
             </div>
           </div>
-        ))
-      }
+        ))}
+      </>}
     </>
   );
 }
