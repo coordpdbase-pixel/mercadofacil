@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 const SUPABASE_URL = "https://tkkyublacucwbaoplsbl.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRra3l1YmxhY3Vjd2Jhb3Bsc2JsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NjQ0MzAsImV4cCI6MjA5NzA0MDQzMH0.7Y4GW4XJIPaaak6dND5WBAgRozSeW3HoaMPoKuqFwlI";
@@ -268,7 +268,7 @@ function ProductCard({group,markets,onDelete}){
   return(
     <div className="card">
       <div className="price-item" style={{paddingTop:0}} onClick={()=>setOpen(!open)}>
-        <div className="price-item-img">🛍️</div>
+        <div className="price-item-img">{group.entries[0].photo?<img src={group.entries[0].photo} alt="" style={{width:"100%",height:"100%",objectFit:"cover",borderRadius:10}}/>:"🛍️"}</div>
         <div className="price-item-info">
           <div className="price-item-name">{group.name}</div>
           <div className="price-item-meta">
@@ -310,15 +310,36 @@ function RegisterTab({markets,onSave}){
   const [price,setPrice]=useState("");
   const [market,setMarket]=useState(markets[0]||"");
   const [qty,setQty]=useState("1");
+  const [photo,setPhoto]=useState(null);
   const [saving,setSaving]=useState(false);
+  const fileRef=useRef();
 
   useEffect(()=>{if(!market&&markets.length) setMarket(markets[0]);},[markets]);
+
+  function handlePhoto(e){
+    const file=e.target.files[0];
+    if(!file) return;
+    // resize before saving to keep size small
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const canvas=document.createElement("canvas");
+      const max=800;
+      let w=img.width,h=img.height;
+      if(w>max){h=Math.round(h*max/w);w=max;}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext("2d").drawImage(img,0,0,w,h);
+      setPhoto(canvas.toDataURL("image/jpeg",0.7));
+      URL.revokeObjectURL(url);
+    };
+    img.src=url;
+  }
 
   async function handleSave(){
     if(!name.trim()||!price||!market) return;
     setSaving(true);
-    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qty||"1",ts:Date.now()});
-    setName("");setPrice("");setQty("1");
+    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qty||"1",photo:photo||null,ts:Date.now()});
+    setName("");setPrice("");setQty("1");setPhoto(null);
     setSaving(false);
   }
 
@@ -334,6 +355,14 @@ function RegisterTab({markets,onSave}){
     <>
       <div className="section-title">Registrar Preço</div>
       <div className="card">
+        <div onClick={()=>fileRef.current.click()} style={{border:`2px dashed ${C.border}`,borderRadius:12,padding:16,textAlign:"center",cursor:"pointer",background:C.cream,marginBottom:12,transition:"border .2s"}}>
+          {photo
+            ? <img src={photo} alt="produto" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:10}}/>
+            : <><div style={{fontSize:36,marginBottom:6}}>📸</div><div style={{fontFamily:"Sora,sans-serif",fontWeight:600,fontSize:14,marginBottom:4}}>Tirar foto do produto</div><div style={{fontSize:12,color:C.muted}}>Toque para abrir a câmera</div></>
+          }
+        </div>
+        <input type="file" accept="image/*" capture="environment" ref={fileRef} style={{display:"none"}} onChange={handlePhoto}/>
+        {photo&&<button className="btn btn-sm btn-danger" style={{marginBottom:12,width:"100%"}} onClick={()=>setPhoto(null)}>✕ Remover foto</button>}
         <div style={{marginBottom:12}}>
           <div className="label">Nome do produto</div>
           <input className="input" placeholder="Ex: Arroz Camil 5kg" value={name} onChange={e=>setName(e.target.value)}/>
