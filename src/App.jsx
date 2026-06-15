@@ -19,7 +19,7 @@ const css = `
   .header-top{display:flex;align-items:center;justify-content:space-between;}
   .logo{font-family:'Sora',sans-serif;font-size:22px;font-weight:700;color:${C.white};letter-spacing:-0.5px;}
   .logo span{color:#A8E6BE;}
-  .badge{background:${C.tangerine};color:${AC.white};font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;}
+  .badge{background:${C.tangerine};color:${C.white};font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;}
   .badge-admin{background:#7C3AED;}
   .tabs{display:flex;border-bottom:1px solid ${C.border};background:${C.white};position:sticky;top:73px;z-index:40;overflow-x:auto;}
   .tab{flex:1;min-width:58px;padding:10px 2px;border:none;background:none;font-family:'Inter',sans-serif;font-size:10px;font-weight:500;color:${C.muted};cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;}
