@@ -111,6 +111,13 @@ function fmtDate(ts){return new Date(ts).toLocaleDateString("pt-BR",{day:"2-digi
 function uid(){return Math.random().toString(36).slice(2,9);}
 function mci(m,markets){return MCOLORS[markets.indexOf(m)%MCOLORS.length]||"m0";}
 
+// Device ID — único por dispositivo, salvo no localStorage
+function getDeviceId(){
+  let id=localStorage.getItem("mf_device_id");
+  if(!id){id=uid()+uid();localStorage.setItem("mf_device_id",id);}
+  return id;
+}
+
 const H={"Content-Type":"application/json","apikey":SUPABASE_KEY,"Authorization":"Bearer "+SUPABASE_KEY};
 async function sbGet(table,extra=""){const r=await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*${extra}`,{headers:H});return r.json();}
 async function sbInsert(table,row){await fetch(`${SUPABASE_URL}/rest/v1/${table}`,{method:"POST",headers:{...H,"Prefer":"return=minimal"},body:JSON.stringify(row)});}
@@ -140,7 +147,7 @@ export default function App(){
   async function reload(){
     const [p,s,m,pr,pe,re]=await Promise.all([
       sbGet("prices","&order=ts.desc"),
-      sbGet("shopping","&order=ts.asc"),
+      sbGet("shopping",`&order=ts.asc&device_id=eq.${getDeviceId()}`),
       sbGetMarkets(),
       sbGet("promocoes","&order=ts.desc&aprovada=eq.true"),
       isAdmin?sbGet("fotos_pendentes","&order=ts.desc&aprovada=eq.false"):Promise.resolve([]),
@@ -163,14 +170,14 @@ export default function App(){
   async function addPrice(entry){await sbInsert("prices",entry);await reload();showToast("✅ Preço registrado!");}
   async function deletePrice(id){await sbDelete("prices",id);await reload();showToast("🗑️ Removido");}
 
-  async function addItem(item){await sbInsert("shopping",item);await reload();setShowAdd(false);showToast("✅ Item adicionado!");}
+  async function addItem(item){await sbInsert("shopping",{...item,device_id:getDeviceId()});await reload();setShowAdd(false);showToast("✅ Item adicionado!");}
   async function addFromCompare(product,bestEntry){
-    // Check if already in list
+    const deviceId=getDeviceId();
     const existing=list.find(i=>i.name.toLowerCase()===product.toLowerCase()&&!i.done);
     if(existing){
       await sbUpdate("shopping",existing.id,{qty:String(Number(existing.qty||1)+1)});
     } else {
-      await sbInsert("shopping",{id:uid(),name:product,qty:"1",unit:bestEntry.qty||"Unidade",market:bestEntry.market,price:bestEntry.price,done:false,ts:Date.now()});
+      await sbInsert("shopping",{id:uid(),name:product,qty:"1",unit:bestEntry.qty||"Unidade",market:bestEntry.market,price:bestEntry.price,done:false,device_id:deviceId,ts:Date.now()});
     }
     await reload();
     showToast("🛒 Adicionado à lista!");
