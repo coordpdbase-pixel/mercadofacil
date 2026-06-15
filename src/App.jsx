@@ -19,7 +19,7 @@ const css = `
   .header-top{display:flex;align-items:center;justify-content:space-between;}
   .logo{font-family:'Sora',sans-serif;font-size:22px;font-weight:700;color:${C.white};letter-spacing:-0.5px;}
   .logo span{color:#A8E6BE;}
-  .badge{background:${C.tangerine};color:${C.white};font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;}
+  .badge{background:${C.tangerine};color:${AC.white};font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;}
   .badge-admin{background:#7C3AED;}
   .tabs{display:flex;border-bottom:1px solid ${C.border};background:${C.white};position:sticky;top:73px;z-index:40;overflow-x:auto;}
   .tab{flex:1;min-width:58px;padding:10px 2px;border:none;background:none;font-family:'Inter',sans-serif;font-size:10px;font-weight:500;color:${C.muted};cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;}
@@ -358,15 +358,17 @@ function RegisterTab({markets,onSave}){
   const [name,setName]=useState("");
   const [price,setPrice]=useState("");
   const [market,setMarket]=useState(markets[0]||"");
-  const [qty,setQty]=useState("1");
+  const [qty,setQty]=useState("");
+  const [unit,setUnit]=useState("Unidade");
   const [saving,setSaving]=useState(false);
   useEffect(()=>{if(!market&&markets.length)setMarket(markets[0]);},[markets]);
 
   async function handleSave(){
     if(!name.trim()||!price||!market) return;
     setSaving(true);
-    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qty||"1",photo:null,ts:Date.now()});
-    setName("");setPrice("");setQty("1");
+    const qtyFull = qty ? `${qty} ${unit}` : unit;
+    await onSave({id:uid(),name:name.trim(),price:parseFloat(price.replace(",",".")),market,qty:qtyFull,photo:null,ts:Date.now()});
+    setName("");setPrice("");setQty("");setUnit("Unidade");
     setSaving(false);
   }
 
@@ -380,9 +382,25 @@ function RegisterTab({markets,onSave}){
           <div className="label">Nome do produto</div>
           <input className="input" placeholder="Ex: Arroz Camil 5kg" value={name} onChange={e=>setName(e.target.value)}/>
         </div>
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <div style={{flex:2}}><div className="label">Preço (R$)</div><input className="input" placeholder="0,00" inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/></div>
-          <div style={{flex:1}}><div className="label">Qtd</div><input className="input" placeholder="1" inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)}/></div>
+        <div style={{marginBottom:12}}>
+          <div className="label">Preço (R$)</div>
+          <input className="input" placeholder="0,00" inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/>
+        </div>
+        <div style={{marginBottom:12}}>
+          <div className="label">Quantidade</div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="input" placeholder="Ex: 500" inputMode="decimal" value={qty} onChange={e=>setQty(e.target.value)} style={{flex:1}}/>
+            <select className="input" value={unit} onChange={e=>setUnit(e.target.value)} style={{flex:1}}>
+              <option>Unidade</option>
+              <option>Pacote</option>
+              <option>Kg</option>
+              <option>g</option>
+              <option>Litro</option>
+              <option>ml</option>
+              <option>Caixa</option>
+              <option>Dúzia</option>
+            </select>
+          </div>
         </div>
         <div style={{marginBottom:4}}>
           <div className="label">Supermercado</div>
