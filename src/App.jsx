@@ -640,17 +640,26 @@ function AdminTab({pending,onApprove,onReject,reports,onResolve}){
 function AddItemSheet({onClose,onSave,markets}){
   const [name,setName]=useState("");
   const [qty,setQty]=useState("1");
+  const [price,setPrice]=useState("");
   const [market,setMarket]=useState(markets[0]||"");
   const [saving,setSaving]=useState(false);
-  async function handle(){if(!name.trim())return;setSaving(true);await onSave({id:uid(),name:name.trim(),qty,market,price:0,done:false,ts:Date.now()});setSaving(false);}
+  async function handle(){
+    if(!name.trim())return;
+    setSaving(true);
+    await onSave({id:uid(),name:name.trim(),qty,market,price:price?parseFloat(price.replace(",",".")):0,done:false,ts:Date.now()});
+    setSaving(false);
+  }
   return(
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={e=>e.stopPropagation()}>
         <div className="sheet-handle"/>
         <div className="sheet-title">Adicionar à lista</div>
         <div style={{marginBottom:12}}><div className="label">Produto</div><input className="input" placeholder="Ex: Leite, Ovos..." value={name} onChange={e=>setName(e.target.value)} autoFocus/></div>
-        <div style={{marginBottom:12}}><div className="label">Quantidade</div><input className="input" placeholder="1" inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)}/></div>
-        <div style={{marginBottom:16}}><div className="label">Mercado preferido</div><select className="input" value={market} onChange={e=>setMarket(e.target.value)}>{markets.map(m=><option key={m}>{m}</option>)}</select></div>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <div style={{flex:1}}><div className="label">Quantidade</div><input className="input" placeholder="1" inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value)}/></div>
+          <div style={{flex:1}}><div className="label">Preço (R$)</div><input className="input" placeholder="0,00" inputMode="decimal" value={price} onChange={e=>setPrice(e.target.value)}/></div>
+        </div>
+        <div style={{marginBottom:16}}><div className="label">Mercado</div><select className="input" value={market} onChange={e=>setMarket(e.target.value)}>{markets.map(m=><option key={m}>{m}</option>)}</select></div>
         <button className="btn btn-primary" onClick={handle} disabled={!name.trim()||saving} style={{opacity:!name.trim()?.5:1}}>{saving?"Adicionando...":"Adicionar"}</button>
       </div>
     </div>
